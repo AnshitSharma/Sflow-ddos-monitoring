@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design tokens ─────────────────────────────────────────────────────── */
+:root {
+  --c-canvas:       #0b0d11;   /* page background — deep blue-black        */
+  --c-surface:      #12151b;   /* panels / cards                           */
+  --c-raised:       #181c24;   /* hovered / nested surfaces, table headers */
+  --c-edge:         #1f242e;   /* hairline borders                         */
+  --c-edge-strong:  #2b3140;   /* emphasised borders                       */
+  --c-ink:          #e2e6ed;   /* primary text                             */
+  --c-ink-dim:      #98a1b3;   /* secondary text                           */
+  --c-ink-faint:    #5b6477;   /* tertiary text / axis labels              */
+  --c-accent:       #4d9fff;   /* signal blue — links, active, focus       */
+  --c-accent-soft:  rgba(77, 159, 255, 0.12);
+  --c-ok:           #73bf69;
+  --c-warn:         #fade2a;
+  --c-crit:         #f2495c;
+  --c-grid:         rgba(226, 230, 237, 0.05);
+}
+
+html, body, #__next { height: 100%; }
+body {
+  margin: 0;
+  background: var(--c-canvas);
+  color: var(--c-ink);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "ss01" on;
+}
+
+/* ── Scrollbars ────────────────────────────────────────────────────────── */
+.noc-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.noc-scroll::-webkit-scrollbar-track { background: transparent; }
+.noc-scroll::-webkit-scrollbar-thumb {
+  background: var(--c-edge-strong);
+  border-radius: 8px;
+  border: 2px solid var(--c-canvas);
+}
+.noc-scroll::-webkit-scrollbar-thumb:hover { background: #3a4254; }
+.noc-scroll { scrollbar-width: thin; scrollbar-color: var(--c-edge-strong) transparent; }
+
+/* ── Focus ─────────────────────────────────────────────────────────────── */
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+select option { background: var(--c-surface); color: var(--c-ink); }
+::selection { background: var(--c-accent-soft); color: var(--c-ink); }
+
+/* ── Motion ────────────────────────────────────────────────────────────── */
+@keyframes noc-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes noc-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes noc-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
+}
+@keyframes noc-grow-x {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* Page content: staggered panel reveal on navigation.
+   Pages render a single root div, so the panels are the grandchildren. */
+.noc-page > * > * { animation: noc-rise 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.noc-page > * > *:nth-child(2) { animation-delay: 40ms; }
+.noc-page > * > *:nth-child(3) { animation-delay: 80ms; }
+.noc-page > * > *:nth-child(4) { animation-delay: 120ms; }
+.noc-page > * > *:nth-child(5) { animation-delay: 160ms; }
+.noc-page > * > *:nth-child(n + 6) { animation-delay: 200ms; }
+
+.noc-chart-enter { animation: noc-fade 0.4s ease-out both; }
+.noc-live-dot { animation: noc-pulse 2.2s ease-in-out infinite; }
+.noc-bar-grow { transform-origin: left center; animation: noc-grow-x 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .noc-page > * > *, .noc-chart-enter, .noc-live-dot, .noc-bar-grow { animation: none; }
+  * { transition-duration: 0.01ms !important; }
+}

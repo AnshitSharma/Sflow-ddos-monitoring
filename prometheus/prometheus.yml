@@ -1,0 +1,47 @@
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+
+scrape_configs:
+  # All counter + flow-derived metrics for ALL agents.
+  # sFlow-RT exposes them at /prometheus/metrics/{agent}/{metric}/txt ;
+  # "ALL/ALL" is a wildcard for every agent and every metric.
+  - job_name: sflow-metrics
+    scheme: https
+    metrics_path: /sflow/prometheus/metrics/ALL/ALL/txt
+    basic_auth:
+      username: admin
+      password: Ankesh@1234
+    static_configs:
+      - targets: ['noc.bharatdatacenter.com']
+
+  # Engine health (datagrams, heap, cpu, agent count).
+  - job_name: sflow-analyzer
+    scheme: https
+    metrics_path: /sflow/prometheus/analyzer/txt
+    basic_auth:
+      username: admin
+      password: Ankesh@1234
+    static_configs:
+      - targets: ['noc.bharatdatacenter.com']
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+
+# ---------------------------------------------------------------------------
+# LIGHTER ALTERNATIVE (same host): if sFlow-RT listens locally on :8008 with no
+# auth, replace the two sflow jobs above with the unauthenticated, no-TLS form:
+#
+#   - job_name: sflow-metrics
+#     metrics_path: /prometheus/metrics/ALL/ALL/txt
+#     static_configs:
+#       - targets: ['host.docker.internal:8008']
+#   - job_name: sflow-analyzer
+#     metrics_path: /prometheus/analyzer/txt
+#     static_configs:
+#       - targets: ['host.docker.internal:8008']
+#
+# (and add  extra_hosts: ["host.docker.internal:host-gateway"]  to the
+#  prometheus service in docker-compose.yml on Linux)
+# ---------------------------------------------------------------------------

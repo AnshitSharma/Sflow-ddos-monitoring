@@ -1,0 +1,25 @@
+apiVersion: 1
+
+datasources:
+  # METRICS — graphs (utilization, throughput, engine health)
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      timeInterval: 15s
+
+  # FORENSICS — flow records (who talked to who, when)
+  - name: OpenSearch
+    uid: opensearch
+    type: grafana-opensearch-datasource
+    access: proxy
+    url: http://opensearch:9200
+    database: "sflow-flows-*"
+    jsonData:
+      flavor: OpenSearch
+      version: 2.17.1
+      timeField: "@timestamp"
+      pplEnabled: true

@@ -1,0 +1,134 @@
+{
+  "uid": "sflow-overview",
+  "title": "sFlow Overview",
+  "tags": ["sflow"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "agent",
+        "label": "Agent",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(sflow_ifinutilization, agent)",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Agents reporting",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "sflow_analyzer_agent_count", "refId": "A" } ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Ingest rate (datagrams in)",
+      "gridPos": { "h": 4, "w": 5, "x": 4, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "bps" } },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "rate(sflow_analyzer_received_bytes[5m]) * 8", "refId": "A" } ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Engine heap used",
+      "gridPos": { "h": 4, "w": 5, "x": 9, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "expr": "sflow_analyzer_heap_used_bytes", "refId": "A" } ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Interface inbound utilization %",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 } },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sflow_ifinutilization{agent=~\"$agent\"}",
+          "legendFormat": "{{agent}} if{{ifindex}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Interface outbound utilization %",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 } },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sflow_ifoututilization{agent=~\"$agent\"}",
+          "legendFormat": "{{agent}} if{{ifindex}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Inbound throughput (bits/s)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "fieldConfig": { "defaults": { "unit": "bps" } },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sflow_ifinoctets{agent=~\"$agent\"} * 8",
+          "legendFormat": "{{agent}} if{{ifindex}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Outbound throughput (bits/s)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "fieldConfig": { "defaults": { "unit": "bps" } },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sflow_ifoutoctets{agent=~\"$agent\"} * 8",
+          "legendFormat": "{{agent}} if{{ifindex}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Inbound errors + discards (per s)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sflow_ifinerrors{agent=~\"$agent\"}", "legendFormat": "err {{agent}} if{{ifindex}}", "refId": "A" },
+        { "expr": "sflow_ifindiscards{agent=~\"$agent\"}", "legendFormat": "disc {{agent}} if{{ifindex}}", "refId": "B" }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "Datagrams lost / out-of-order (per s)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "rate(sflow_analyzer_discarded_datagrams[5m])", "legendFormat": "discarded", "refId": "A" },
+        { "expr": "rate(sflow_analyzer_parse_errors[5m])", "legendFormat": "parse errors", "refId": "B" }
+      ]
+    }
+  ]
+}
