@@ -1,0 +1,24 @@
+# Public entry point: HTTPS on 443 (80 redirects to it) -> Next.js dashboard.
+#
+# Certificate (SITE_ADDRESS / SITE_TLS in .env):
+#   IP address  -> SITE_TLS="tls internal": Caddy's own self-signed cert; the
+#                  browser shows a one-time "not private" warning.
+#   DNS name pointing at the VM -> SITE_TLS="tls you@example.com": free trusted
+#                  Let's Encrypt cert, renewed automatically.
+{
+	default_sni {$SITE_ADDRESS}
+}
+
+{$SITE_ADDRESS} {
+	{$SITE_TLS}
+	encode gzip
+	redir / /dashboard
+	reverse_proxy webapp:3000
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy same-origin
+		-Server
+	}
+}

@@ -4,7 +4,7 @@ name: sflow-monitoring
 # Reach them from your laptop via SSH tunnel or through Apache reverse proxy.
 
 services:
-  # ---- METRICS pipeline: time-series storage (7-day retention) ----
+  # ---- METRICS pipeline: time-series storage (30-day retention) ----
   prometheus:
     image: prom/prometheus:v2.54.1
     container_name: sflow-prometheus
@@ -12,9 +12,12 @@ services:
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
-      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.time=30d
+      # Safety cap: if the disk budget is hit first, oldest data is dropped early.
+      - --storage.tsdb.retention.size=40GB
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/sflowrt_password:/etc/prometheus/sflowrt_password:ro
       - prometheus-data:/prometheus
     ports:
       - "127.0.0.1:9090:9090"
@@ -29,7 +32,7 @@ services:
       - DISABLE_SECURITY_PLUGIN=true        # internal-only; bound to localhost
       - DISABLE_INSTALL_DEMO_CONFIG=true
       - bootstrap.memory_lock=true
-      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"   # 30 days of flow records
     ulimits:
       memlock: { soft: -1, hard: -1 }
       nofile:  { soft: 65536, hard: 65536 }
@@ -61,8 +64,27 @@ services:
       - NEXT_PUBLIC_BASE_PATH=/dashboard
       # SFLOWRT_URL / SFLOWRT_USER / SFLOWRT_PASS come from .env
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"   # local checks only; browsers come in through `proxy`
+
+  # ---- Public HTTPS entry point (Caddy) -> webapp ----
+  proxy:
+    image: caddy:2.8-alpine
+    container_name: sflow-proxy
+    restart: unless-stopped
+    depends_on: [webapp]
+    environment:
+      - SITE_ADDRESS=${SITE_ADDRESS:?set SITE_ADDRESS in .env}
+      - SITE_TLS=${SITE_TLS:-tls internal}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "80:80"
+      - "443:443"
 
 volumes:
   prometheus-data:
   opensearch-data:
+  caddy-data:
+  caddy-config:

@@ -15,6 +15,9 @@ dist/
 .env.*.local
 !.env.example
 
+# Secrets generated on the VM
+prometheus/sflowrt_password
+
 # Logs and OS files
 *.log
 .DS_Store

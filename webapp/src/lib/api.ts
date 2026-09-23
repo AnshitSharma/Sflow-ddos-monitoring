@@ -2,20 +2,29 @@ import type { Series, FlowRow, FlowKeyRow, DdosEvent, TopRow, Agent, PromMatrixR
 
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH || '';
 
+/** fetch() that sends the browser back to the login screen when the session has expired. */
+async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
+  const r = await fetch(input, init);
+  if (r.status === 401 && typeof window !== 'undefined') {
+    window.location.assign(`${BASE}/login?next=${encodeURIComponent(window.location.pathname.slice(BASE.length) || '/')}`);
+  }
+  return r;
+}
+
 export async function queryRange(
   promql: string, startSec: number, endSec: number, stepSec = 30,
 ): Promise<PromMatrixResult[]> {
   const u = `${BASE}/api/metrics?` + new URLSearchParams({
     query: promql, start: String(startSec), end: String(endSec), step: String(stepSec),
   });
-  const r = await fetch(u);
+  const r = await apiFetch(u);
   const j = await r.json();
   return j?.data?.result ?? [];
 }
 
 export async function queryInstant(promql: string): Promise<PromVectorResult[]> {
   const u = `${BASE}/api/metrics/instant?` + new URLSearchParams({ query: promql });
-  const r = await fetch(u);
+  const r = await apiFetch(u);
   const j = await r.json();
   return j?.data?.result ?? [];
 }
@@ -53,7 +62,7 @@ export function parseAgents(raw: unknown): Agent[] {
 }
 
 export async function searchFlows(body: object): Promise<{ total: number; rows: FlowRow[] }> {
-  const r = await fetch(`${BASE}/api/flows`, {
+  const r = await apiFetch(`${BASE}/api/flows`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -62,7 +71,7 @@ export async function searchFlows(body: object): Promise<{ total: number; rows: 
 }
 
 export async function live<T = unknown>(path: string): Promise<T> {
-  const r = await fetch(`${BASE}/api/live/${path}`);
+  const r = await apiFetch(`${BASE}/api/live/${path}`);
   if (!r.ok) throw new Error(`live ${path} → ${r.status}`);
   return r.json();
 }
@@ -76,7 +85,7 @@ type RawActiveFlow = { agent?: string; value?: number; key?: string; dataSource?
  */
 export async function activeFlows(name: string, maxFlows = 30): Promise<FlowKeyRow[]> {
   try {
-    const r = await fetch(`${BASE}/api/live/activeflows/ALL/${name}/json?maxFlows=${maxFlows}`, { cache: 'no-store' });
+    const r = await apiFetch(`${BASE}/api/live/activeflows/ALL/${name}/json?maxFlows=${maxFlows}`, { cache: 'no-store' });
     if (!r.ok) return [];
     const raw: RawActiveFlow[] = await r.json();
     if (!Array.isArray(raw)) return [];
@@ -96,7 +105,7 @@ export async function activeFlows(name: string, maxFlows = 30): Promise<FlowKeyR
 /** (Re)bake a filter into the ip_pairs_focus flow (and ensure the base ip_pairs flow). */
 export async function setFlowFocus(filter: string): Promise<void> {
   try {
-    await fetch(`${BASE}/api/flowfocus`, {
+    await apiFetch(`${BASE}/api/flowfocus`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ filter }),
@@ -109,7 +118,7 @@ type RawEvent = { agent?: string; metric?: string; thresholdID?: string; flowKey
 /** Live DDoS detections from sFlow-RT /events (ddos-protect thresholds, byFlow:true). */
 export async function flowEvents(maxEvents = 50): Promise<DdosEvent[]> {
   try {
-    const r = await fetch(`${BASE}/api/live/events/json?maxEvents=${maxEvents}`, { cache: 'no-store' });
+    const r = await apiFetch(`${BASE}/api/live/events/json?maxEvents=${maxEvents}`, { cache: 'no-store' });
     if (!r.ok) return [];
     const raw: RawEvent[] = await r.json();
     if (!Array.isArray(raw)) return [];

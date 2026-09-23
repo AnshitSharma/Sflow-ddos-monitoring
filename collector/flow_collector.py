@@ -5,6 +5,11 @@ Long-polls sFlow-RT's /flows/json endpoint for logged flow records (the flows
 defined with "log": true, e.g. ixp_flood_local, ixp_badprotocol, ixp_bgp ...)
 and bulk-indexes them into daily OpenSearch indices for forensic search.
 
+The poll cursor is sFlow-RT's `flowID` parameter (only records newer than it
+are returned; the request blocks up to `timeout` ms until one arrives). Each
+document gets a deterministic _id, so re-reading sFlow-RT's backlog after a
+collector restart overwrites instead of duplicating.
+
 Old indices past RETENTION_DAYS are deleted once a day.
 """
 import os
@@ -84,26 +89,30 @@ def ensure_template():
 def bulk_index(records):
     if not records:
         return
-    idx = f"{INDEX_PREFIX}-{dt.datetime.utcnow():%Y.%m.%d}"
     lines = []
     for rec in records:
         doc = dict(rec)
-        doc["@timestamp"] = dt.datetime.utcnow().isoformat() + "Z"
+        # Event time from sFlow-RT (epoch ms); fall back to "now".
+        ms = rec.get("end") or rec.get("start")
+        ts = (dt.datetime.utcfromtimestamp(ms / 1000) if isinstance(ms, (int, float)) and ms > 0
+              else dt.datetime.utcnow())
+        doc["@timestamp"] = ts.isoformat() + "Z"
         fk = rec.get("flowKeys")
         if isinstance(fk, str):
             # split on common separators so each key is searchable on its own
             doc["keys"] = [k for k in fk.replace("_SEP_", ",").split(",") if k]
-        lines.append('{"index":{}}')
+        doc_id = f"{rec.get('agent')}|{rec.get('name')}|{rec.get('flowID')}|{rec.get('start')}"
+        lines.append(json.dumps({"index": {"_index": f"{INDEX_PREFIX}-{ts:%Y.%m.%d}", "_id": doc_id}}))
         lines.append(json.dumps(doc))
     payload = "\n".join(lines) + "\n"
-    r = requests.post(f"{OPENSEARCH}/{idx}/_bulk",
+    r = requests.post(f"{OPENSEARCH}/_bulk",
                       data=payload,
                       headers={"Content-Type": "application/x-ndjson"},
                       timeout=30)
     if not r.ok:
         log(f"bulk error HTTP {r.status_code}: {r.text[:300]}")
     else:
-        log(f"indexed {len(records)} flow(s) into {idx}")
+        log(f"indexed {len(records)} flow(s)")
 
 
 def purge_old_indices():
@@ -134,7 +143,8 @@ def main():
     wait_for_opensearch()
     ensure_template()
 
-    params = {"maxFlows": 1000, "timeout": POLL_TIMEOUT, "eventID": -1}
+    # sFlow-RT's long-poll `timeout` is in seconds.
+    params = {"maxFlows": 1000, "timeout": max(1, POLL_TIMEOUT // 1000), "flowID": -1}
     if FLOW_NAMES:
         params["name"] = FLOW_NAMES
 
@@ -150,7 +160,7 @@ def main():
                 # advance cursor to the newest flowID we have seen
                 max_id = max((f.get("flowID", -1) for f in flows), default=-1)
                 if max_id >= 0:
-                    params["eventID"] = max_id
+                    params["flowID"] = max_id
         except requests.RequestException as e:
             log(f"poll error: {e} (retry in 5s)")
             time.sleep(5)

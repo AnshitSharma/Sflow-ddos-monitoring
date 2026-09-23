@@ -29,6 +29,7 @@ export const RANGES = [
   { key: '1h',  label: '1h',  spanSec: 3600,      stepSec: 60,      points: 60 },
   { key: '24h', label: '24h', spanSec: 86400,     stepSec: 900,     points: 96 },
   { key: '7d',  label: '7d',  spanSec: 7*86400,   stepSec: 3600*2,  points: 84 },
+  { key: '30d', label: '30d', spanSec: 30*86400,  stepSec: 3600*3,  points: 240 },
 ] as const;
-export type RangeKey = '10m' | '1h' | '24h' | '7d';
+export type RangeKey = '10m' | '1h' | '24h' | '7d' | '30d';
 export type RangeConfig = (typeof RANGES)[number];

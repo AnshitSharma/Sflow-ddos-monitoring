@@ -39,8 +39,10 @@ export default function ForensicsPage() {
 
   // Mock fallback is generated client-side only (it embeds wall-clock timestamps).
   const mock = useMockSnapshot(rangeKey);
-  const flowRows: FlowRow[] = real?.rows?.length ? real.rows : mock?.flowRows ?? [];
-  const totalCount = real?.total ?? mock?.flowRows.length ?? 0;
+  // Demo data only when OpenSearch can't be reached — an empty store shows as empty.
+  const connected = Array.isArray(real?.rows);
+  const flowRows: FlowRow[] = connected ? real!.rows : mock?.flowRows ?? [];
+  const totalCount = connected ? real!.total : mock?.flowRows.length ?? 0;
 
   const filtered = useMemo(() => flowRows.filter(r => {
     if (name !== 'all' && r.name !== name) return false;
@@ -65,14 +67,25 @@ export default function ForensicsPage() {
       </div>) },
   ];
 
-  const showingDemo = !(real?.rows?.length);
+  const showingDemo = !connected;
+
+  // Match-volume histogram over the selected range, from whatever rows are shown.
+  const histo = useMemo(() => {
+    const buckets = 60, end = Date.now() / 1000, start = end - range.spanSec, w = range.spanSec / buckets;
+    const points = Array.from({ length: buckets }, (_, i) => ({ t: start + i * w, v: 0 }));
+    for (const r of filtered) {
+      const i = Math.floor((+new Date(r.timestamp) / 1000 - start) / w);
+      if (i >= 0 && i < buckets) points[i].v++;
+    }
+    return points;
+  }, [filtered, range.spanSec]);
 
   return (
     <div className="flex flex-col gap-3">
       {showingDemo && (
         <div className="flex items-center gap-2 rounded-lg border border-dashed border-amber-500/40 bg-amber-500/5 px-3 py-2">
           <DemoBadge />
-          <span className="text-[12px] text-amber-200/80">Sample flow records — the OpenSearch forensics store isn&apos;t connected yet (Part 2). Search/filter works on demo data.</span>
+          <span className="text-[12px] text-amber-200/80">Sample flow records — the OpenSearch forensics store can&apos;t be reached right now. Search/filter works on demo data.</span>
         </div>
       )}
       <Panel dense bodyClass="!p-3">
@@ -92,7 +105,7 @@ export default function ForensicsPage() {
       </Panel>
 
       <Panel icon={Icon.Activity} title="Match volume" subtitle={`${formatNum(filtered.length)} records`} dense>
-        {mock ? <Histogram points={mock.histo.points} height={84} color={THEME.info} /> : <div style={{ height: 84 }} />}
+        {connected || !mock ? <Histogram points={histo} height={84} color={THEME.info} /> : <Histogram points={mock.histo.points} height={84} color={THEME.info} />}
       </Panel>
 
       <Panel icon={Icon.Forensics} title="Flow log" subtitle={`${formatNum(filtered.length)} / ${formatNum(totalCount)} records`} dense>

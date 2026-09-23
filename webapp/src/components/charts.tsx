@@ -47,7 +47,7 @@ function niceScale(maxVal: number, yMax?: number): { top: number; ticks: number[
 }
 
 /** Time ticks snapped to round wall-clock intervals (like Grafana's x-axis). */
-const TIME_STEPS = [10, 30, 60, 120, 300, 600, 900, 1800, 3600, 2 * 3600, 3 * 3600, 6 * 3600, 12 * 3600, 86400, 2 * 86400];
+const TIME_STEPS = [10, 30, 60, 120, 300, 600, 900, 1800, 3600, 2 * 3600, 3 * 3600, 6 * 3600, 12 * 3600, 86400, 2 * 86400, 7 * 86400];
 function timeTicks(t0: number, t1: number): number[] {
   const span = Math.max(1, t1 - t0);
   const step = TIME_STEPS.find(s => span / s <= 7) ?? 2 * 86400;
@@ -57,6 +57,9 @@ function timeTicks(t0: number, t1: number): number[] {
 }
 
 function formatTimeTick(tSec: number, spanSec: number): string {
+  if (spanSec > 8 * 86400) {
+    return new Date(tSec * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  }
   if (spanSec > 2 * 86400) {
     const d = new Date(tSec * 1000);
     return d.toLocaleDateString('en-GB', { weekday: 'short' }) + ' ' + formatClock(tSec);

@@ -37,5 +37,6 @@ export const Icon = {
   Pause:      (p: SvgProps) => <Svg {...p}><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></Svg>,
   Play:       (p: SvgProps) => <Svg {...p}><path d="m6 4 14 8-14 8V4z"/></Svg>,
   Sliders:    (p: SvgProps) => <Svg {...p}><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></Svg>,
+  LogOut:     (p: SvgProps) => <Svg {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></Svg>,
   Flow:       (p: SvgProps) => <Svg {...p}><circle cx="5" cy="6" r="2.5"/><circle cx="19" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.2 7.2 10.8 16M16.8 7.2 13.2 16"/></Svg>,
 };

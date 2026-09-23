@@ -2,6 +2,13 @@ global:
   scrape_interval: 15s
   scrape_timeout: 10s
 
+# Everything below pulls from the EXISTING sFlow-RT at noc.bharatdatacenter.com
+# (read-only HTTP GETs). Nothing on that server needs to be reconfigured.
+#
+# The sFlow-RT password is NOT stored here. It is read from
+# ./prometheus/sflowrt_password (git-ignored, mounted into the container) —
+# scripts/setup-vm.sh creates it from SFLOWRT_PASS in .env.
+
 scrape_configs:
   # All counter + flow-derived metrics for ALL agents.
   # sFlow-RT exposes them at /prometheus/metrics/{agent}/{metric}/txt ;
@@ -9,9 +16,9 @@ scrape_configs:
   - job_name: sflow-metrics
     scheme: https
     metrics_path: /sflow/prometheus/metrics/ALL/ALL/txt
-    basic_auth:
+    basic_auth: &sflowrt_auth
       username: admin
-      password: Ankesh@1234
+      password_file: /etc/prometheus/sflowrt_password
     static_configs:
       - targets: ['noc.bharatdatacenter.com']
 
@@ -19,29 +26,78 @@ scrape_configs:
   - job_name: sflow-analyzer
     scheme: https
     metrics_path: /sflow/prometheus/analyzer/txt
-    basic_auth:
-      username: admin
-      password: Ankesh@1234
+    basic_auth: *sflowrt_auth
+    static_configs:
+      - targets: ['noc.bharatdatacenter.com']
+
+  # ---- Traffic Analytics page: top ASNs / countries (bits/sec) -------------
+  # Served by sFlow-RT's `prometheus` app (export.js). Metric + job names must
+  # match webapp/src/lib/queries.ts. ASN/country lookups need sFlow-RT's
+  # built-in GeoIP/ASN databases, which the current setup already uses.
+  - job_name: sflow-rt-asn-src
+    scheme: https
+    metrics_path: /sflow/app/prometheus/scripts/export.js/flows/ALL/txt
+    basic_auth: *sflowrt_auth
+    params:
+      metric:   ['sflow_asn_bps']
+      key:      ['null:[asn:ipsource:both]:unknown']
+      label:    ['src']
+      value:    ['bytes']
+      scale:    ['8']
+      aggMode:  ['sum']
+      minValue: ['1000']
+      maxFlows: ['100']
+    static_configs:
+      - targets: ['noc.bharatdatacenter.com']
+
+  - job_name: sflow-rt-asn-dst
+    scheme: https
+    metrics_path: /sflow/app/prometheus/scripts/export.js/flows/ALL/txt
+    basic_auth: *sflowrt_auth
+    params:
+      metric:   ['sflow_asn_bps']
+      key:      ['null:[asn:ipdestination:both]:unknown']
+      label:    ['dst']
+      value:    ['bytes']
+      scale:    ['8']
+      aggMode:  ['sum']
+      minValue: ['1000']
+      maxFlows: ['100']
+    static_configs:
+      - targets: ['noc.bharatdatacenter.com']
+
+  - job_name: sflow-rt-country-src
+    scheme: https
+    metrics_path: /sflow/app/prometheus/scripts/export.js/flows/ALL/txt
+    basic_auth: *sflowrt_auth
+    params:
+      metric:   ['sflow_country_src_bps']
+      key:      ['null:[country:ipsource:both]:unknown']
+      label:    ['src']
+      value:    ['bytes']
+      scale:    ['8']
+      aggMode:  ['sum']
+      minValue: ['1000']
+      maxFlows: ['100']
+    static_configs:
+      - targets: ['noc.bharatdatacenter.com']
+
+  - job_name: sflow-rt-country-dst
+    scheme: https
+    metrics_path: /sflow/app/prometheus/scripts/export.js/flows/ALL/txt
+    basic_auth: *sflowrt_auth
+    params:
+      metric:   ['sflow_country_dst_bps']
+      key:      ['null:[country:ipdestination:both]:unknown']
+      label:    ['dst']
+      value:    ['bytes']
+      scale:    ['8']
+      aggMode:  ['sum']
+      minValue: ['1000']
+      maxFlows: ['100']
     static_configs:
       - targets: ['noc.bharatdatacenter.com']
 
   - job_name: prometheus
     static_configs:
       - targets: ['localhost:9090']
-
-# ---------------------------------------------------------------------------
-# LIGHTER ALTERNATIVE (same host): if sFlow-RT listens locally on :8008 with no
-# auth, replace the two sflow jobs above with the unauthenticated, no-TLS form:
-#
-#   - job_name: sflow-metrics
-#     metrics_path: /prometheus/metrics/ALL/ALL/txt
-#     static_configs:
-#       - targets: ['host.docker.internal:8008']
-#   - job_name: sflow-analyzer
-#     metrics_path: /prometheus/analyzer/txt
-#     static_configs:
-#       - targets: ['host.docker.internal:8008']
-#
-# (and add  extra_hosts: ["host.docker.internal:host-gateway"]  to the
-#  prometheus service in docker-compose.yml on Linux)
-# ---------------------------------------------------------------------------

@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   if (q.agent) must.push({ term: { agent: q.agent } });
   if (q.text)  must.push({ multi_match: { query: q.text, fields: ['keys', 'flowKeys'] } });
   if (q.fromISO || q.toISO) {
-    must.push({ range: { '@timestamp': { gte: q.fromISO || 'now-7d', lte: q.toISO || 'now' } } });
+    must.push({ range: { '@timestamp': { gte: q.fromISO || 'now-30d', lte: q.toISO || 'now' } } });
   }
 
   const dsl = {
@@ -39,7 +39,12 @@ export async function POST(req: NextRequest) {
       cache: 'no-store',
     });
     const body = await r.json();
-    const hits = (body?.hits?.hits ?? []).map((h: { _source: unknown }) => h._source);
+    // Show when sFlow-RT saw the event (end/start, epoch ms), not when we indexed it.
+    const hits = (body?.hits?.hits ?? []).map((h: { _source: Record<string, unknown> }) => {
+      const s = h._source;
+      const t = Number(s.end ?? s.start);
+      return { ...s, timestamp: Number.isFinite(t) && t > 0 ? new Date(t).toISOString() : s['@timestamp'] };
+    });
     return NextResponse.json({ total: body?.hits?.total?.value ?? 0, rows: hits }, { status: r.status });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 502 });

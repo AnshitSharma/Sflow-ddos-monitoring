@@ -52,6 +52,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refresh = useCallback(() => setLastUpdated(Date.now()), []);
+  const signOut = useCallback(async () => {
+    await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/api/auth/logout`, { method: 'POST' }).catch(() => {});
+    window.location.assign(`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/login`);
+  }, []);
   const ago = Math.max(0, Math.round((Date.now() - lastUpdated) / 1000));
 
   const active = NAV.find(n => {
@@ -59,6 +63,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return pathname.startsWith(n.href);
   }) || NAV[0];
   const ActiveIco = active.icon;
+
+  if (pathname === '/login') return <>{children}</>;
 
   return (
     <RangeContext.Provider value={{ rangeKey, setRangeKey, paused }}>
@@ -142,6 +148,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <button onClick={refresh} title="Refresh now" aria-label="Refresh now"
                 className="w-8 h-8 rounded-lg border border-edge bg-surface flex items-center justify-center text-ink-dim hover:text-ink hover:bg-raised hover:border-edge-strong transition-colors duration-150">
                 <Icon.Refresh size={14} />
+              </button>
+              <button onClick={signOut} title="Sign out" aria-label="Sign out"
+                className="w-8 h-8 rounded-lg border border-edge bg-surface flex items-center justify-center text-ink-dim hover:text-ink hover:bg-raised hover:border-edge-strong transition-colors duration-150">
+                <Icon.LogOut size={14} />
               </button>
             </div>
           </header>
