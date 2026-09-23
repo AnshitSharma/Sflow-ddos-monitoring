@@ -398,24 +398,26 @@ export function Histogram({ points, height = 90, color = THEME.info, kind = 'cou
   const gap = 2;
   const bw = Math.max(1, (width - (n - 1) * gap) / n);
   const fmt = kind === 'bps' ? formatBps : formatNum;
+  const span = n > 1 ? points[n - 1].t - points[0].t : 0;
   return (
     <div ref={ref} className="w-full relative">
       <svg width={width} height={height} className="noc-chart-enter">
         <line x1={0} y1={plotH + 0.5} x2={width} y2={plotH + 0.5} stroke={THEME.border} strokeWidth="1" />
         {points.map((p, i) => {
+          if (p.v <= 0) return null;   // empty bucket: no bar, just the baseline
           const h = Math.max(1, (p.v / max) * (plotH - 4));
           const x = i * (bw + gap);
           return <rect key={i} x={x} y={plotH - h} width={bw} height={h} rx="1.5" fill={color}
             opacity={hover === i ? 1 : 0.5} style={{ transition: 'opacity 120ms ease' }}
             onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} />;
         })}
-        {[0, Math.floor(n / 2), n - 1].map(i => (
-          <text key={i} x={i * (bw + gap) + bw / 2} y={height - 3} textAnchor="middle" fontSize="9" fill={THEME.textFaint} fontFamily="var(--font-mono), monospace">{formatClock(points[i]?.t ?? 0)}</text>
+        {n > 0 && [0, Math.floor(n / 2), n - 1].map((i, j) => (
+          <text key={i} x={j === 0 ? 0 : j === 2 ? width : i * (bw + gap) + bw / 2} y={height - 3} textAnchor={j === 0 ? 'start' : j === 2 ? 'end' : 'middle'} fontSize="9" fill={THEME.textFaint} fontFamily="var(--font-mono), monospace">{formatTimeTick(points[i]?.t ?? 0, span)}</text>
         ))}
       </svg>
       {hover != null && (
         <div className="absolute -top-1 -translate-y-full pointer-events-none rounded-md border border-edge-strong bg-[#0e1015]/95 px-2.5 py-1.5 text-[10px] font-mono text-ink shadow-xl shadow-black/40"
-          style={{ left: Math.min(width - 110, hover * (bw + gap)) }}>
+          style={{ left: Math.max(0, Math.min(width - 130, hover * (bw + gap))) }}>
           {formatClockSec(points[hover].t)} · {fmt(points[hover].v)}
         </div>
       )}

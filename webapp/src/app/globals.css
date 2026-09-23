@@ -4,27 +4,29 @@
 
 /* ── Design tokens ─────────────────────────────────────────────────────── */
 :root {
-  --c-canvas:       #0b0d11;   /* page background — deep blue-black        */
-  --c-surface:      #12151b;   /* panels / cards                           */
-  --c-raised:       #181c24;   /* hovered / nested surfaces, table headers */
-  --c-edge:         #1f242e;   /* hairline borders                         */
-  --c-edge-strong:  #2b3140;   /* emphasised borders                       */
-  --c-ink:          #e2e6ed;   /* primary text                             */
-  --c-ink-dim:      #98a1b3;   /* secondary text                           */
-  --c-ink-faint:    #5b6477;   /* tertiary text / axis labels              */
-  --c-accent:       #4d9fff;   /* signal blue — links, active, focus       */
+  /* Colors are RGB channels so Tailwind opacity modifiers (bg-raised/40) work. */
+  --c-canvas:       11 13 17;     /* page background — deep blue-black        */
+  --c-surface:      18 21 27;     /* panels / cards                           */
+  --c-raised:       24 28 36;     /* hovered / nested surfaces, table headers */
+  --c-edge:         31 36 46;     /* hairline borders                         */
+  --c-edge-strong:  43 49 64;     /* emphasised borders                       */
+  --c-ink:          226 230 237;  /* primary text                             */
+  --c-ink-dim:      152 161 179;  /* secondary text                           */
+  --c-ink-faint:    91 100 119;   /* tertiary text / axis labels              */
+  --c-accent:       77 159 255;   /* signal blue — links, active, focus       */
   --c-accent-soft:  rgba(77, 159, 255, 0.12);
   --c-ok:           #73bf69;
   --c-warn:         #fade2a;
   --c-crit:         #f2495c;
   --c-grid:         rgba(226, 230, 237, 0.05);
+  color-scheme: dark;
 }
 
 html, body, #__next { height: 100%; }
 body {
   margin: 0;
-  background: var(--c-canvas);
-  color: var(--c-ink);
+  background: rgb(var(--c-canvas));
+  color: rgb(var(--c-ink));
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -35,22 +37,30 @@ body {
 .noc-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
 .noc-scroll::-webkit-scrollbar-track { background: transparent; }
 .noc-scroll::-webkit-scrollbar-thumb {
-  background: var(--c-edge-strong);
+  background: rgb(var(--c-edge-strong));
   border-radius: 8px;
-  border: 2px solid var(--c-canvas);
+  border: 2px solid rgb(var(--c-canvas));
 }
 .noc-scroll::-webkit-scrollbar-thumb:hover { background: #3a4254; }
-.noc-scroll { scrollbar-width: thin; scrollbar-color: var(--c-edge-strong) transparent; }
+.noc-scroll { scrollbar-width: thin; scrollbar-color: rgb(var(--c-edge-strong)) transparent; }
 
 /* ── Focus ─────────────────────────────────────────────────────────────── */
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible {
-  outline: 2px solid var(--c-accent);
+  outline: 2px solid rgb(var(--c-accent));
   outline-offset: 2px;
   border-radius: 4px;
 }
 
-select option { background: var(--c-surface); color: var(--c-ink); }
-::selection { background: var(--c-accent-soft); color: var(--c-ink); }
+select option { background: rgb(var(--c-surface)); color: rgb(var(--c-ink)); }
+/* Chrome autofill paints inputs light-yellow/white — keep them on-theme. */
+input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus {
+  -webkit-text-fill-color: rgb(var(--c-ink));
+  -webkit-box-shadow: 0 0 0 1000px rgb(var(--c-canvas)) inset;
+  caret-color: rgb(var(--c-ink));
+  transition: background-color 9999s ease-out 0s;
+}
+input[type="search"]::-webkit-search-cancel-button { filter: invert(0.6); }
+::selection { background: var(--c-accent-soft); color: rgb(var(--c-ink)); }
 
 /* ── Motion ────────────────────────────────────────────────────────────── */
 @keyframes noc-rise {
@@ -83,7 +93,74 @@ select option { background: var(--c-surface); color: var(--c-ink); }
 .noc-live-dot { animation: noc-pulse 2.2s ease-in-out infinite; }
 .noc-bar-grow { transform-origin: left center; animation: noc-grow-x 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
+.noc-fade-in { animation: noc-fade 0.25s ease-out both; }
+
+/* ── Loading: packet-sampling loader ───────────────────────────────────────
+   Wire at the top, collector below the centre. Packets cross in 1.8s; every
+   third is "sampled" — it drops down the tap into the collector at 64% of its
+   cycle (1.152s). Two sampled packets per cycle → collector pulses every 0.9s,
+   offset 0.252s so the pulse lands with the packet. */
+.noc-flow { position: relative; width: 176px; height: 44px; }
+.noc-flow-wire {
+  position: absolute; left: 0; right: 0; top: 11px; height: 1px;
+  background: linear-gradient(90deg, transparent, rgb(var(--c-edge-strong)) 15%, rgb(var(--c-edge-strong)) 85%, transparent);
+}
+.noc-flow-drop {
+  position: absolute; left: 87.5px; top: 12px; height: 21px; width: 1px;
+  background: repeating-linear-gradient(to bottom, rgb(var(--c-accent) / 0.45) 0 2px, transparent 2px 5px);
+}
+.noc-flow-collector {
+  position: absolute; left: 83px; top: 33px; width: 10px; height: 10px; border-radius: 3px;
+  background: rgb(var(--c-accent) / 0.18); border: 1px solid rgb(var(--c-accent) / 0.7);
+  animation: noc-collect 0.9s ease-out 0.252s infinite;
+}
+.noc-flow-pkt {
+  position: absolute; left: -8px; top: 9px; width: 8px; height: 4px; border-radius: 1.5px;
+  background: rgb(var(--c-ink-faint)); opacity: 0;
+  animation: noc-pkt 1.8s linear infinite;
+}
+.noc-flow-pkt.is-sampled {
+  background: rgb(var(--c-accent)); box-shadow: 0 0 6px rgb(var(--c-accent) / 0.8);
+  animation-name: noc-pkt-sampled;
+}
+@keyframes noc-pkt {
+  0%   { transform: translateX(0);     opacity: 0; }
+  8%   { opacity: 0.8; }
+  92%  { opacity: 0.8; }
+  100% { transform: translateX(184px); opacity: 0; }
+}
+@keyframes noc-pkt-sampled {
+  0%   { transform: translate(0, 0);       opacity: 0; }
+  8%   { opacity: 1; }
+  50%  { transform: translate(92px, 0);    opacity: 1; }
+  64%  { transform: translate(92px, 24px) scale(0.5); opacity: 0.9; }
+  68%  { transform: translate(92px, 24px) scale(0.5); opacity: 0; }
+  100% { transform: translate(92px, 24px) scale(0.5); opacity: 0; }
+}
+@keyframes noc-collect {
+  0%   { transform: scale(1.35); box-shadow: 0 0 0 0 rgb(var(--c-accent) / 0.55); background: rgb(var(--c-accent) / 0.5); }
+  70%  { transform: scale(1);    box-shadow: 0 0 0 7px rgb(var(--c-accent) / 0); background: rgb(var(--c-accent) / 0.18); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 0 rgb(var(--c-accent) / 0); }
+}
+
+/* Overlay waits 150ms before showing, so sub-150ms loads never flash. */
+.noc-overlay-in { animation: noc-fade 0.2s ease-out 0.15s both; }
+
+/* Header progress bar: an accent segment sweeping left→right. */
+.noc-progress {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 35%;
+  background: linear-gradient(90deg, transparent, rgb(var(--c-accent)), transparent);
+  animation: noc-sweep 1.1s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+@keyframes noc-sweep {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(300%); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .noc-page > * > *, .noc-chart-enter, .noc-live-dot, .noc-bar-grow { animation: none; }
+  .noc-flow-pkt, .noc-flow-collector, .noc-progress, .noc-overlay-in, .noc-fade-in { animation: none; }
+  .noc-flow-pkt { opacity: 0.6; transform: translateX(calc(var(--i, 0) * 30px)); }
+  .noc-progress { width: 100%; opacity: 0.5; }
   * { transition-duration: 0.01ms !important; }
 }

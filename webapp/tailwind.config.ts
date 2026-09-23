@@ -9,15 +9,15 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        canvas: "var(--c-canvas)",
-        surface: "var(--c-surface)",
-        raised: "var(--c-raised)",
-        edge: "var(--c-edge)",
-        "edge-strong": "var(--c-edge-strong)",
-        ink: "var(--c-ink)",
-        "ink-dim": "var(--c-ink-dim)",
-        "ink-faint": "var(--c-ink-faint)",
-        accent: "var(--c-accent)",
+        canvas: "rgb(var(--c-canvas) / <alpha-value>)",
+        surface: "rgb(var(--c-surface) / <alpha-value>)",
+        raised: "rgb(var(--c-raised) / <alpha-value>)",
+        edge: "rgb(var(--c-edge) / <alpha-value>)",
+        "edge-strong": "rgb(var(--c-edge-strong) / <alpha-value>)",
+        ink: "rgb(var(--c-ink) / <alpha-value>)",
+        "ink-dim": "rgb(var(--c-ink-dim) / <alpha-value>)",
+        "ink-faint": "rgb(var(--c-ink-faint) / <alpha-value>)",
+        accent: "rgb(var(--c-accent) / <alpha-value>)",
         "accent-soft": "var(--c-accent-soft)",
       },
       fontFamily: {

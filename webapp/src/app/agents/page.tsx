@@ -8,33 +8,37 @@ import { Q } from '@/lib/queries';
 import { useMockAgents } from '@/lib/mock';
 import { formatPct, formatNum, formatUptime, formatBps } from '@/lib/format';
 import { Panel, KpiCard, StatusBadge } from '@/components/ui';
+import { LoadingOverlay } from '@/components/loading';
 import { Sparkline } from '@/components/charts';
 import { Icon } from '@/components/icons';
 import type { Agent } from '@/lib/types';
 
 export default function AgentsPage() {
   const { rangeKey } = useContext(RangeContext);
-  const { data: liveData } = useSWR('agents', () => live('agents/json'), { refreshInterval: 10000 });
+  const { data: liveData, isLoading } = useSWR('agents', () => live('agents/json'), { refreshInterval: 10000 });
 
   // sFlow-RT returns an object keyed by IP; fall back to mock only if unreachable.
   // Mock agents are generated client-side only (timestamps would break hydration).
   const mockAgents = useMockAgents(rangeKey);
   const realAgents = parseAgents(liveData);
-  const agents: Agent[] = realAgents.length ? realAgents : mockAgents;
+  const agents: Agent[] = realAgents.length ? realAgents : isLoading ? [] : mockAgents;
+  const n = (v: number) => isLoading ? '—' : String(v);
 
   const avgLoss = agents.filter(a => a.up).reduce((s, a) => s + (a.lostPct ?? 0), 0) / Math.max(1, agents.filter(a => a.up).length);
 
   return (
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard kpi={{ label: 'Total agents',   value: String(agents.length),                      state: 'ok'  }} />
-        <KpiCard kpi={{ label: 'Online',         value: String(agents.filter(a => a.up).length),   state: 'ok'  }} />
-        <KpiCard kpi={{ label: 'Offline',        value: String(agents.filter(a => !a.up).length),  state: agents.some(a => !a.up) ? 'crit' : 'ok' }} />
-        <KpiCard kpi={{ label: 'Avg loss',       value: formatPct(avgLoss),                         state: avgLoss > 1 ? 'warn' : 'ok' }} />
+        <KpiCard kpi={{ label: 'Total agents',   value: n(agents.length),                           state: 'ok'  }} />
+        <KpiCard kpi={{ label: 'Online',         value: n(agents.filter(a => a.up).length),        state: 'ok'  }} />
+        <KpiCard kpi={{ label: 'Offline',        value: n(agents.filter(a => !a.up).length),       state: agents.some(a => !a.up) ? 'crit' : 'ok' }} />
+        <KpiCard kpi={{ label: 'Avg loss',       value: isLoading ? '—' : formatPct(avgLoss),      state: avgLoss > 1 ? 'warn' : 'ok' }} />
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
-        {agents.map(a => <AgentCard key={a.ip} agent={a} />)}
-      </div>
+      <LoadingOverlay show={isLoading} label="Polling sFlow agents" minHeight={220}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
+          {agents.map(a => <AgentCard key={a.ip} agent={a} />)}
+        </div>
+      </LoadingOverlay>
     </div>
   );
 }
@@ -44,7 +48,7 @@ function AgentCard({ agent }: { agent: Agent }) {
   const lossColor = !agent.up ? THEME.crit : warnLoss ? THEME.warn : THEME.ok;
 
   // Real per-agent throughput sparkline (last 10 min), summed across interfaces.
-  const { data: bpsData } = useSWR(agent.up ? ['agentSpark', agent.ip] : null, () => {
+  const { data: bpsData, isLoading: sparkLoading } = useSWR(agent.up ? ['agentSpark', agent.ip] : null, () => {
     const now = Math.floor(Date.now() / 1000);
     return queryRange(`sum(sflow_ifinoctets{agent="${agent.ip}"}) * 8`, now - 600, now, 10);
   }, { refreshInterval: 15000 });
@@ -78,7 +82,9 @@ function AgentCard({ agent }: { agent: Agent }) {
         </div>
         {agent.up && spark && spark.points.length
           ? <Sparkline points={spark.points} color={warnLoss ? THEME.warn : THEME.inbound} width={260} height={36} />
-          : <div className="h-9 flex items-center text-[11px] text-ink-faint font-mono">no datagrams received</div>}
+          : sparkLoading
+            ? <div className="h-9 flex items-center" aria-label="Loading throughput"><span className="relative block h-px w-full overflow-hidden bg-edge"><span className="noc-progress" /></span></div>
+            : <div className="h-9 flex items-center text-[11px] text-ink-faint font-mono">no datagrams received</div>}
       </div>
 
       <div className="flex items-center justify-between text-[10px] text-ink-faint font-mono">

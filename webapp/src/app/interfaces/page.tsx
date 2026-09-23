@@ -1,5 +1,5 @@
 'use client';
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { RangeContext } from '@/components/shell';
 import { RANGES, THEME } from '@/lib/theme';
@@ -20,23 +20,29 @@ export default function InterfacesPage() {
   const getNow = () => Math.floor(Date.now() / 1000);
 
   const { data: agentsRaw } = useSWR('agents', () => live('agents/json'), { refreshInterval: 30000 });
-  const realAgents = parseAgents(agentsRaw);
-  const agentIps = realAgents.length ? realAgents.map(a => a.ip) : FALLBACK_IPS;
+  const realAgents = useMemo(() => parseAgents(agentsRaw), [agentsRaw]);
+  const agentIps = useMemo(() => realAgents.length ? realAgents.map(a => a.ip) : FALLBACK_IPS, [realAgents]);
 
   const [agentIp, setAgentIp] = useState(agentIps[0]);
   // Keep selection valid once the real list arrives.
   useEffect(() => { if (!agentIps.includes(agentIp)) setAgentIp(agentIps[0]); }, [agentIps, agentIp]);
   const agent = realAgents.find(a => a.ip === agentIp);
 
-  const { data: inUtilData }  = useSWR(['inUtil', agentIp, rangeKey], () => queryRange(Q.inUtil(agentIp), getNow() - range.spanSec, getNow(), range.stepSec), { refreshInterval: 15000, fallbackData: [] });
-  const { data: outUtilData } = useSWR(['outUtil', agentIp, rangeKey], () => queryRange(Q.outUtil(agentIp), getNow() - range.spanSec, getNow(), range.stepSec), { refreshInterval: 15000, fallbackData: [] });
-  const { data: inBpsData }   = useSWR(['inBps', agentIp, rangeKey], () => queryRange(Q.inBps(agentIp), getNow() - range.spanSec, getNow(), range.stepSec), { refreshInterval: 15000, fallbackData: [] });
-  const { data: outBpsData }  = useSWR(['outBps', agentIp, rangeKey], () => queryRange(Q.outBps(agentIp), getNow() - range.spanSec, getNow(), range.stepSec), { refreshInterval: 15000, fallbackData: [] });
-  const { data: errData }     = useSWR(['inErrors', agentIp, rangeKey], () => queryRange(Q.inErrors(agentIp), getNow() - range.spanSec, getNow(), range.stepSec), { refreshInterval: 15000, fallbackData: [] });
-  const { data: discData }    = useSWR(['inDiscards', agentIp, rangeKey], () => queryRange(Q.inDiscards(agentIp), getNow() - range.spanSec, getNow(), range.stepSec), { refreshInterval: 15000, fallbackData: [] });
+  const { data: inUtilData, isLoading: inUtilLoading }  = useSWR(['inUtil', agentIp, rangeKey], () => queryRange(Q.inUtil(agentIp), getNow() - range.spanSec, getNow(), range.stepSec), { refreshInterval: 15000, keepPreviousData: true });
+  const { data: outUtilData, isLoading: outUtilLoading } = useSWR(['outUtil', agentIp, rangeKey], () => queryRange(Q.outUtil(agentIp), getNow() - range.spanSec, getNow(), range.stepSec), { refreshInterval: 15000, keepPreviousData: true });
+  const { data: inBpsData, isLoading: inBpsLoading }   = useSWR(['inBps', agentIp, rangeKey], () => queryRange(Q.inBps(agentIp), getNow() - range.spanSec, getNow(), range.stepSec), { refreshInterval: 15000, keepPreviousData: true });
+  const { data: outBpsData, isLoading: outBpsLoading }  = useSWR(['outBps', agentIp, rangeKey], () => queryRange(Q.outBps(agentIp), getNow() - range.spanSec, getNow(), range.stepSec), { refreshInterval: 15000, keepPreviousData: true });
+  const { data: errData, isLoading: inErrLoading }     = useSWR(['inErrors', agentIp, rangeKey], () => queryRange(Q.inErrors(agentIp), getNow() - range.spanSec, getNow(), range.stepSec), { refreshInterval: 15000, keepPreviousData: true });
+  const { data: discData, isLoading: discLoading }    = useSWR(['inDiscards', agentIp, rangeKey], () => queryRange(Q.inDiscards(agentIp), getNow() - range.spanSec, getNow(), range.stepSec), { refreshInterval: 15000, keepPreviousData: true });
 
-  // Mock fallback is generated client-side only (it embeds wall-clock timestamps).
-  const mock = useMockSnapshot(rangeKey);
+  const utilLoading = inUtilLoading || outUtilLoading;
+  const bpsLoading  = inBpsLoading || outBpsLoading;
+  const errLoading  = inErrLoading || discLoading;
+
+  // Mock fallback is generated client-side only (it embeds wall-clock timestamps),
+  // and only used once a fetch has come back empty — never while loading.
+  const snapshot = useMockSnapshot(rangeKey);
+  const mock = utilLoading || bpsLoading || errLoading ? null : snapshot;
 
   const labelFn = (m: Record<string, string>) => `${m.agent ?? agentIp} if${m.ifindex ?? '?'}`;
   const inUtil  = inUtilData?.length  ? matrixToSeries(inUtilData,  labelFn) : mock?.ifaceUtil.slice(0, 1) ?? [];
@@ -60,19 +66,22 @@ export default function InterfacesPage() {
         </div>
       </div>
 
-      <Panel icon={Icon.Activity} title="Interface utilization" subtitle={`${agentIp} · % of link capacity · last ${range.label}`}>
-        {utilSeries.length ? (
+      <Panel icon={Icon.Activity} title="Interface utilization" subtitle={`${agentIp} · % of link capacity · last ${range.label}`}
+        loading={utilLoading} loadingLabel={`Loading last ${range.label}`}>
+        {utilSeries.length || utilLoading ? (
           <TimeSeriesChart series={utilSeries} variant="line" kind="pct" yMax={100} height={230} colors={[THEME.inbound, THEME.outbound, THEME.violet, THEME.teal]} />
         ) : <EmptyState title="No utilization data" message="No interface metrics yet. Check that sFlow-RT is scraping." />}
       </Panel>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
-        <Panel className="xl:col-span-2" icon={Icon.Activity} title="Throughput" subtitle="bits per second">
-          {bpsSeries.length ? (
+        <Panel className="xl:col-span-2" icon={Icon.Activity} title="Throughput" subtitle="bits per second"
+          loading={bpsLoading} loadingLabel={`Loading last ${range.label}`}>
+          {bpsSeries.length || bpsLoading ? (
             <TimeSeriesChart series={bpsSeries} variant="area" kind="bps" height={210} colors={[THEME.inbound, THEME.outbound, THEME.violet, THEME.teal]} />
           ) : <EmptyState title="No throughput data" />}
         </Panel>
-        <Panel icon={Icon.Alert} title="Errors & discards" subtitle="packets / interval">
+        <Panel icon={Icon.Alert} title="Errors & discards" subtitle="packets / interval"
+          loading={errLoading} loadingLabel="Loading counters">
           <TimeSeriesChart series={[...errSeries.slice(0,1), ...discSeries.slice(0,1)]} variant="line" kind="count" height={210}
             colors={[THEME.crit, THEME.warn]} />
         </Panel>

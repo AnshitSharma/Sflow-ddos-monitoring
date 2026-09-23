@@ -13,7 +13,7 @@ import type { DdosEvent } from '@/lib/types';
 export default function DdosPage() {
   const router = useRouter();
 
-  const { data: events } = useSWR<DdosEvent[]>('ddos-events', () => flowEvents(50), { refreshInterval: 10000 });
+  const { data: events, isLoading } = useSWR<DdosEvent[]>('ddos-events', () => flowEvents(50), { refreshInterval: 10000 });
   // Number of armed ddos-protect signatures (thresholds), for an "is it watching?" indicator.
   const { data: thresholds } = useSWR<Record<string, unknown>>('thresholds', () => live('threshold/json'), { refreshInterval: 60000 });
 
@@ -47,9 +47,10 @@ export default function DdosPage() {
         <KpiCard kpi={{ label: 'Targets',           value: String(targets),      state: targets ? 'warn' : 'ok' }} />
       </div>
 
-      <Panel icon={Icon.Ddos} title="Active detections" subtitle="From sFlow-RT ddos-protect thresholds · live" dense>
+      <Panel icon={Icon.Ddos} title="Active detections" subtitle="From sFlow-RT ddos-protect thresholds · live" dense
+        loading={isLoading} loadingLabel="Checking thresholds">
         <div className="flex flex-col gap-2">
-          {list.length === 0 && <EmptyState icon={Icon.Check} title="All clear" message="No DDoS thresholds are currently exceeded." />}
+          {list.length === 0 && !isLoading && <EmptyState icon={Icon.Check} title="All clear" message="No DDoS thresholds are currently exceeded." />}
           {list.map((d, i) => <DdosRow key={d.flowKey + d.ts + i} d={d} onInvestigate={() => investigate(d.target)} />)}
         </div>
       </Panel>

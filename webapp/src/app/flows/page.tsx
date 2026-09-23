@@ -7,6 +7,7 @@ import { IP_PAIRS, IP_PAIRS_FOCUS, buildFilter, filterLabel, type FlowFilter } f
 import { formatBps } from '@/lib/format';
 import { Panel, DataTable, EmptyState, type ColDef } from '@/components/ui';
 import { TimeSeriesChart } from '@/components/charts';
+import { FlowLoader } from '@/components/loading';
 import { Icon } from '@/components/icons';
 import type { FlowKeyRow, Series } from '@/lib/types';
 
@@ -35,11 +36,14 @@ export default function FlowsPage() {
   // (Re)bake the focus flow whenever the filter changes; this also ensures the base flow exists.
   useEffect(() => { setFlowFocus(filterExpr); }, [filterExpr]);
 
-  const { data: rows } = useSWR<FlowKeyRow[]>(
+  // Each poll is stamped with its time: SWR drops responses equal to the last one,
+  // which would stall the trend buffer below whenever traffic is steady.
+  const { data: poll, isLoading } = useSWR<{ t: number; rows: FlowKeyRow[] }>(
     ['flows', activeName, filterExpr],
-    () => activeFlows(activeName, 30),
+    async () => ({ t: Date.now() / 1000, rows: await activeFlows(activeName, 30) }),
     { refreshInterval: POLL_MS, keepPreviousData: true },
   );
+  const rows = poll?.rows;
   const flows = rows ?? [];
 
   // Rolling trend buffer — accumulated client-side from each poll (as sFlow-RT's own UI does).
@@ -47,16 +51,16 @@ export default function FlowsPage() {
   const keyRef = useRef<string>('');
   const swrKey = activeName + '|' + filterExpr;
   useEffect(() => {
-    if (!rows) return;
+    if (!poll || isLoading) return;   // skip the previous filter's data kept during a switch
     const vals: Record<string, number> = {};
-    for (const r of rows) vals[`${r.ipsource} → ${r.ipdestination}`] = r.bps;
-    const snap = { t: Date.now() / 1000, vals };
+    for (const r of poll.rows) vals[`${r.ipsource} → ${r.ipdestination}`] = r.bps;
+    const snap = { t: poll.t, vals };
     setBuf(prev => {
       const base = keyRef.current === swrKey ? prev : [];   // reset window on filter change
       keyRef.current = swrKey;
       return [...base, snap].slice(-MAX_POINTS);
     });
-  }, [rows, swrKey]);
+  }, [poll, swrKey, isLoading]);
 
   const series: Series[] = useMemo(() => {
     if (buf.length < 2) return [];
@@ -123,17 +127,21 @@ export default function FlowsPage() {
         title={hasFilter ? 'Flow trend (filtered)' : 'Live flow trend'}
         subtitle={hasFilter ? filterLabel(filter) : 'Top source→destination pairs across all agents'}
         right={<span className="font-mono text-[12px]" style={{ color: THEME.inbound }}>{formatBps(totalBps)}</span>}>
-        {series.length < 2
-          ? <div className="py-10"><EmptyState icon={Icon.Activity} title="Collecting…" message="Building the live trend from sFlow samples. This takes a few seconds." /></div>
+        {/* series is empty until two polls are buffered; a single filtered flow is still a valid chart */}
+        {series.length === 0
+          ? rows && flows.length === 0 && !isLoading
+            ? <div className="py-10"><EmptyState icon={Icon.Activity} title="No traffic" message={hasFilter ? 'Nothing matches this filter in the current sample window.' : 'Waiting for sFlow samples…'} /></div>
+            : <div className="h-[240px] flex items-center justify-center"><FlowLoader label="Sampling live flows — trend builds over a few polls" /></div>
           : <TimeSeriesChart series={series} variant="area" stacked kind="bps" height={240} colors={CAT} />}
       </Panel>
 
       {/* Top talkers */}
       <Panel icon={Icon.Globe}
         title={hasFilter ? 'Flows (filtered)' : 'Top talkers'}
-        subtitle="Click a source or destination IP to filter to that flow only" dense>
+        subtitle="Click a source or destination IP to filter to that flow only" dense
+        loading={isLoading} loadingLabel={hasFilter ? 'Applying filter' : 'Fetching top talkers'}>
         {flows.length === 0
-          ? <EmptyState icon={Icon.Globe} title={hasFilter ? 'No live flows for this filter' : 'No active flows'} message={hasFilter ? 'This IP has no traffic in the current sample window.' : 'Waiting for sFlow samples…'} />
+          ? isLoading ? <div className="h-[150px]" /> : <EmptyState icon={Icon.Globe} title={hasFilter ? 'No live flows for this filter' : 'No active flows'} message={hasFilter ? 'This IP has no traffic in the current sample window.' : 'Waiting for sFlow samples…'} />
           : <DataTable columns={columns} rows={flows} dense maxHeight={460}
               rowKey={r => r.key + r.agent} initialSort={{ key: 'bps', dir: 'desc' }} />}
       </Panel>

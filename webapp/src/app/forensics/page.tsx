@@ -1,5 +1,5 @@
 'use client';
-import React, { useContext, useState, useMemo } from 'react';
+import React, { useContext, useEffect, useState, useMemo } from 'react';
 import useSWR from 'swr';
 import { RangeContext } from '@/components/shell';
 import { RANGES, THEME } from '@/lib/theme';
@@ -28,20 +28,29 @@ export default function ForensicsPage() {
   const [name, setName] = useState('all');
   const [agent, setAgent] = useState('all');
 
+  // Query the store once typing pauses, not on every keystroke.
+  const [debouncedQ, setDebouncedQ] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedQ(q.trim()), 300);
+    return () => clearTimeout(id);
+  }, [q]);
+
   const searchBody = useMemo(() => ({
-    text: q || undefined,
+    text: debouncedQ || undefined,
     name: name !== 'all' ? name : undefined,
     agent: agent !== 'all' ? agent : undefined,
+    fromISO: `now-${range.spanSec}s`,
     size: 200,
-  }), [q, name, agent]);
+  }), [debouncedQ, name, agent, range.spanSec]);
 
-  const { data: real } = useSWR(['flows', JSON.stringify(searchBody)], () => searchFlows(searchBody), { refreshInterval: 30000 });
+  const { data: real, isLoading } = useSWR(['forensics', JSON.stringify(searchBody)], () => searchFlows(searchBody), { refreshInterval: 30000, keepPreviousData: true });
+  const searching = isLoading || q.trim() !== debouncedQ;
 
   // Mock fallback is generated client-side only (it embeds wall-clock timestamps).
   const mock = useMockSnapshot(rangeKey);
   // Demo data only when OpenSearch can't be reached — an empty store shows as empty.
   const connected = Array.isArray(real?.rows);
-  const flowRows: FlowRow[] = connected ? real!.rows : mock?.flowRows ?? [];
+  const flowRows: FlowRow[] = useMemo(() => connected ? real!.rows : isLoading ? [] : mock?.flowRows ?? [], [connected, real, isLoading, mock]);
   const totalCount = connected ? real!.total : mock?.flowRows.length ?? 0;
 
   const filtered = useMemo(() => flowRows.filter(r => {
@@ -67,7 +76,7 @@ export default function ForensicsPage() {
       </div>) },
   ];
 
-  const showingDemo = !connected;
+  const showingDemo = !connected && !isLoading;
 
   // Match-volume histogram over the selected range, from whatever rows are shown.
   const histo = useMemo(() => {
@@ -92,8 +101,9 @@ export default function ForensicsPage() {
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[240px]">
             <Icon.Forensics size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint" />
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search IP, port, MAC, or key…"
+            <input type="search" value={q} onChange={e => setQ(e.target.value)} placeholder="Search IP, port, MAC, or key…" aria-label="Search flow log"
               className="w-full bg-raised/40 border border-edge rounded-md pl-9 pr-3 py-2 text-[13px] text-ink placeholder:text-ink-faint/70 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent/50 font-mono transition-colors duration-150" />
+            {searching && <span className="absolute inset-x-1.5 bottom-0 h-px overflow-hidden rounded-full" aria-hidden><span className="noc-progress" /></span>}
           </div>
           <Select icon={Icon.Filter} label="Flow" value={name} onChange={setName}
             options={FLOW_NAME_OPTIONS.map(n => ({ value: n, label: n }))} />
@@ -104,11 +114,13 @@ export default function ForensicsPage() {
         </div>
       </Panel>
 
-      <Panel icon={Icon.Activity} title="Match volume" subtitle={`${formatNum(filtered.length)} records`} dense>
+      <Panel icon={Icon.Activity} title="Match volume" subtitle={`${formatNum(filtered.length)} records`} dense
+        loading={isLoading} loadingLabel={`Scanning last ${range.label}`}>
         {connected || !mock ? <Histogram points={histo} height={84} color={THEME.info} /> : <Histogram points={mock.histo.points} height={84} color={THEME.info} />}
       </Panel>
 
-      <Panel icon={Icon.Forensics} title="Flow log" subtitle={`${formatNum(filtered.length)} / ${formatNum(totalCount)} records`} dense>
+      <Panel icon={Icon.Forensics} title="Flow log" subtitle={`${formatNum(filtered.length)} / ${formatNum(totalCount)} records`} dense
+        loading={isLoading} loadingLabel="Searching flow log">
         <DataTable columns={columns} rows={filtered} dense maxHeight={460}
           rowKey={r => r.timestamp + (r.keys ?? []).join()}
           initialSort={{ key: 'timestamp', dir: 'desc' }} />

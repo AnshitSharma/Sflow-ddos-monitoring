@@ -4,11 +4,14 @@ import { THEME, RANGES, type RangeKey } from '@/lib/theme';
 import type { Kpi } from '@/lib/types';
 import { Icon } from './icons';
 import { Sparkline } from './charts';
+import { LoadingOverlay } from './loading';
 import type { Series } from '@/lib/types';
 
 /* ── Panel ─────────────────────────────────────────────────────────────── */
-interface PanelProps { title?: string; subtitle?: string; icon?: React.ComponentType<{ size?: number; className?: string }>; right?: React.ReactNode; children: React.ReactNode; className?: string; bodyClass?: string; dense?: boolean; }
-export function Panel({ title, subtitle, icon: Ico, right, children, className = '', bodyClass = '', dense = false }: PanelProps) {
+interface PanelProps { title?: string; subtitle?: string; icon?: React.ComponentType<{ size?: number; className?: string }>; right?: React.ReactNode; children: React.ReactNode; className?: string; bodyClass?: string; dense?: boolean;
+  /** Fetching data the user asked for: dims the body and shows the flow loader. */
+  loading?: boolean; loadingLabel?: string; }
+export function Panel({ title, subtitle, icon: Ico, right, children, className = '', bodyClass = '', dense = false, loading = false, loadingLabel = 'Loading…' }: PanelProps) {
   return (
     <section className={`rounded-lg border border-edge bg-surface flex flex-col transition-colors duration-200 hover:border-edge-strong ${className}`}>
       {(title || right) && (
@@ -23,7 +26,9 @@ export function Panel({ title, subtitle, icon: Ico, right, children, className =
           {right && <div className="shrink-0">{right}</div>}
         </header>
       )}
-      <div className={`${dense ? 'p-3' : 'p-4'} flex-1 min-h-0 ${bodyClass}`}>{children}</div>
+      <div className={`${dense ? 'p-3' : 'p-4'} flex-1 min-h-0 ${bodyClass}`}>
+        <LoadingOverlay show={loading} label={loadingLabel}>{children}</LoadingOverlay>
+      </div>
     </section>
   );
 }
@@ -156,14 +161,15 @@ export function DataTable<T>({ columns, rows, rowKey, maxHeight = 520, initialSo
 }
 
 /* ── TimeRangePicker ───────────────────────────────────────────────────── */
-export function TimeRangePicker({ value, onChange }: { value: RangeKey; onChange: (k: RangeKey) => void }) {
+export function TimeRangePicker({ value, onChange, busy = false }: { value: RangeKey; onChange: (k: RangeKey) => void; busy?: boolean }) {
   return (
     <div className="flex items-center gap-0.5 rounded-lg border border-edge bg-surface p-0.5">
       <Icon.Clock size={14} className="text-ink-faint ml-1.5 mr-1" />
       {RANGES.map(r => (
-        <button key={r.key} onClick={() => onChange(r.key as RangeKey)}
-          className={`px-2.5 py-1 rounded-md text-[12px] font-medium transition-all duration-150 ${value === r.key ? 'bg-accent-soft text-accent shadow-[inset_0_0_0_1px_rgba(77,159,255,0.3)]' : 'text-ink-faint hover:text-ink hover:bg-raised'}`}>
+        <button key={r.key} onClick={() => onChange(r.key as RangeKey)} aria-pressed={value === r.key}
+          className={`relative overflow-hidden px-2.5 py-1 rounded-md text-[12px] font-medium transition-all duration-150 ${value === r.key ? 'bg-accent-soft text-accent shadow-[inset_0_0_0_1px_rgba(77,159,255,0.3)]' : 'text-ink-faint hover:text-ink hover:bg-raised'}`}>
           {r.label}
+          {busy && value === r.key && <span className="absolute inset-x-1 bottom-0 h-px overflow-hidden"><span className="noc-progress" /></span>}
         </button>
       ))}
     </div>

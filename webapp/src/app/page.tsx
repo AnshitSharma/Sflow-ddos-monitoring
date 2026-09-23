@@ -17,10 +17,12 @@ export default function OverviewPage() {
   const range = RANGES.find(r => r.key === rangeKey) || RANGES[1];
   const getNow = () => Math.floor(Date.now() / 1000);
 
-  const { data: inData }  = useSWR(['inBps', rangeKey], () => queryRange(Q.inBpsSum(), getNow() - range.spanSec, getNow(), range.stepSec), { refreshInterval: 15000, fallbackData: [] });
-  const { data: outData } = useSWR(['outBps', rangeKey], () => queryRange(Q.outBpsSum(), getNow() - range.spanSec, getNow(), range.stepSec), { refreshInterval: 15000, fallbackData: [] });
-  const { data: agentsRaw } = useSWR('agents', () => live('agents/json'), { refreshInterval: 10000 });
-  const { data: asnRows }   = useSWR('topAsnSrc', () => queryInstant(Q.topAsnSrc(8)), { refreshInterval: 15000 });
+  // keepPreviousData: on a range switch the old chart stays (dimmed) until the new range arrives.
+  const { data: inData, isLoading: inLoading }   = useSWR(['inBps', rangeKey], () => queryRange(Q.inBpsSum(), getNow() - range.spanSec, getNow(), range.stepSec), { refreshInterval: 15000, keepPreviousData: true });
+  const { data: outData, isLoading: outLoading } = useSWR(['outBps', rangeKey], () => queryRange(Q.outBpsSum(), getNow() - range.spanSec, getNow(), range.stepSec), { refreshInterval: 15000, keepPreviousData: true });
+  const { data: agentsRaw, isLoading: agentsLoading } = useSWR('agents', () => live('agents/json'), { refreshInterval: 10000 });
+  const { data: asnRows, isLoading: asnLoading }      = useSWR('topAsnSrc', () => queryInstant(Q.topAsnSrc(8)), { refreshInterval: 15000 });
+  const thruLoading = inLoading || outLoading;
   const { data: dgRate }    = useSWR('ingestDg',  () => queryInstant(Q.ingestDatagrams), { refreshInterval: 15000 });
 
   // Mock fallback is generated client-side only (it embeds wall-clock timestamps).
@@ -35,19 +37,20 @@ export default function OverviewPage() {
     return () => clearInterval(id);
   }, [paused, rangeKey, range.stepSec]);
 
-  const inSeries: Series  = inData?.length  ? { label: 'Ingress', points: sumMatrix(inData).points }  : mock?.inSeries  ?? { label: 'Ingress', points: [] };
-  const outSeries: Series = outData?.length ? { label: 'Egress',  points: sumMatrix(outData).points } : mock?.outSeries ?? { label: 'Egress',  points: [] };
+  // Demo data only once a fetch has come back empty — never as a stand-in while loading.
+  const inSeries: Series  = inData?.length  ? { label: 'Ingress', points: sumMatrix(inData).points }  : (!thruLoading && mock?.inSeries)  || { label: 'Ingress', points: [] };
+  const outSeries: Series = outData?.length ? { label: 'Egress',  points: sumMatrix(outData).points } : (!thruLoading && mock?.outSeries) || { label: 'Egress',  points: [] };
   const lastIn  = inSeries.points.at(-1)?.v  ?? 0;
   const lastOut = outSeries.points.at(-1)?.v ?? 0;
 
   const realAgents = parseAgents(agentsRaw);
-  const agents: Agent[] = realAgents.length ? realAgents : mock?.agents ?? [];
+  const agents: Agent[] = realAgents.length ? realAgents : agentsLoading ? [] : mock?.agents ?? [];
   const upCount = agents.filter(a => a.up).length;
-  const topASN: TopRow[] = asnRows?.length ? vectorToTopRows(asnRows, 'src') : mock?.topASN ?? [];
+  const topASN: TopRow[] = asnRows?.length ? vectorToTopRows(asnRows, 'src') : asnLoading ? [] : mock?.topASN ?? [];
   const dgPerSec = dgRate?.length ? parseFloat(dgRate[0].value[1]) : 0;
 
   const kpis = [
-    { label: 'Agents reporting', value: `${upCount}/${agents.length}`, state: (upCount < agents.length ? 'warn' : 'ok') as 'warn' | 'ok' },
+    { label: 'Agents reporting', value: agentsLoading ? '—' : `${upCount}/${agents.length}`, state: (upCount < agents.length ? 'warn' : 'ok') as 'warn' | 'ok' },
     { label: 'Total ingest',     value: formatBps(lastIn),  state: 'ok' as const },
     { label: 'In / Out',         value: formatBps(lastIn) + ' / ' + formatBps(lastOut), state: 'ok' as const },
     { label: 'Datagrams/s',      value: dgPerSec ? formatNum(Math.round(dgPerSec)) : '—', unit: 'pps', state: 'ok' as const },
@@ -63,15 +66,16 @@ export default function OverviewPage() {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
         <Panel className="xl:col-span-2" icon={Icon.Activity} title="Total throughput — ingress vs egress"
-          subtitle={`Aggregate · last ${range.label}`}>
+          subtitle={`Aggregate · last ${range.label}`} loading={thruLoading} loadingLabel={`Loading last ${range.label}`}>
           <TimeSeriesChart series={[inSeries, outSeries]} stacked variant="area" kind="bps" height={260} colors={[THEME.inbound, THEME.outbound]} />
         </Panel>
-        <Panel icon={Icon.Globe} title="Top talkers" subtitle="By source ASN">
+        <Panel icon={Icon.Globe} title="Top talkers" subtitle="By source ASN" loading={asnLoading} loadingLabel="Ranking ASNs">
           <BarList rows={topASN} kind="bps" limit={8} colorFn={(_, i) => CAT[i % CAT.length]} />
         </Panel>
       </div>
 
-      <Panel icon={Icon.Server} title="Agent health" subtitle={`${upCount} up · ${agents.length - upCount} down`} dense>
+      <Panel icon={Icon.Server} title="Agent health" subtitle={agentsLoading ? 'Polling agents…' : `${upCount} up · ${agents.length - upCount} down`} dense
+        loading={agentsLoading} loadingLabel="Polling agents">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-7 gap-2">
           {agents.map(a => <AgentChip key={a.ip} agent={a} />)}
         </div>
